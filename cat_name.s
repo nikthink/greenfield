@@ -1,7 +1,8 @@
 # cat_name.s — read a filename from stdin, echo it, then print the file.
-# GNU as, AT&T syntax, x86-64 Linux, raw syscalls (no libc).
+# GNU as, AT&T syntax, x86-64 ELF, portable: calls only ISO C stdio (no raw
+# syscalls), so it runs on any ELF system with a C library (Linux, BSDs, ...).
 #
-# Build:  as cat_name.s -o cat_name.o && ld cat_name.o -o cat_name
+# Build:  cc cat_name.s -o cat_name      (cc links libc and the C runtime)
 # Run:    echo /etc/hostname | ./cat_name
 #
 # AT&T syntax cheat sheet:
@@ -13,105 +14,92 @@
 #   suffix b/w/l/q            -> 8/16/32/64-bit operand size (movb, movq ...),
 #                                optional when a register already implies the size
 #
-# Linux x86-64 syscall ABI:
-#   %rax = syscall number, args in %rdi, %rsi, %rdx, %r10, %r8, %r9
-#   return value in %rax (negative = -errno); syscall clobbers %rcx and %r11
+# System V x86-64 C calling convention:
+#   int/pointer args in %rdi, %rsi, %rdx, %rcx, %r8, %r9; return value in %rax
+#   %rbx, %rbp, %r12-%r15 are callee-saved (survive calls); everything else
+#   may be clobbered. %rsp must be 16-byte aligned at every call instruction.
 
-    .set SYS_read,   0          # .set NAME, value -> assemble-time constant
-    .set SYS_write,  1
-    .set SYS_close,  3
-    .set SYS_exit,   60
-    .set SYS_openat, 257
-    .set AT_FDCWD,   -100       # openat: path relative to current directory
-    .set O_RDONLY,   0
-    .set STDIN,      0
-    .set STDOUT,     1
-    .set BUFSZ,      4096
+    .set NAMESZ, 4096           # .set NAME, value -> assemble-time constant
+    .set EOF,    -1
 
     .section .bss               # zero-initialised, takes no space in the file
     .balign 16                  # align next symbol to 16 bytes
-name:   .zero 4096              # reserve 4096 bytes for the filename
-buf:    .zero BUFSZ             # file copy buffer
+name:   .zero NAMESZ            # reserve space for the filename
 
     .section .rodata            # read-only data
-nl:     .byte '\n'              # a single newline character
+mode:   .asciz "rb"             # fopen mode string (NUL-terminated)
 
     .text                       # code section
-    .globl _start               # export entry point so ld can find it
-    .type  _start, @function    # symbol type metadata (for debuggers/tools)
-_start:
-    # ---- read(STDIN, name, 4095) : get the filename ----
-    mov     $SYS_read, %eax     # writing %eax zero-extends into %rax
-    mov     $STDIN, %edi
-    lea     name(%rip), %rsi    # lea = load effective address (pointer, not value)
-    mov     $4095, %edx         # leave room for a terminating NUL
-    syscall
-    test    %rax, %rax          # sets flags from rax & rax
-    jle     fail                # <= 0 bytes read -> error / EOF
+    .globl main                 # export main; the C runtime calls it
+    .type  main, @function      # symbol type metadata (for debuggers/tools)
+main:
+    # On entry %rsp is 8 mod 16 (call pushed the return address).
+    # Two pushes (16 bytes) + 8 more -> 16-byte aligned for our calls.
+    push    %rbx
+    push    %r12
+    sub     $8, %rsp
 
-    # ---- strip a trailing '\n' if present ----
-    mov     %rax, %rbx          # rbx = length (callee-saved, survives syscalls)
-    lea     name(%rip), %rsi
-    cmpb    $'\n', -1(%rsi,%rbx)    # compare byte at name[len-1]; 'b' = byte size
-    jne     1f                  # 1f = jump forward to the next local label "1:"
-    dec     %rbx
-1:  movb    $0, (%rsi,%rbx)     # NUL-terminate: open() needs a C string
+    # ---- read the filename one char at a time with getchar() ----
+    xor     %ebx, %ebx          # rbx = length (callee-saved, survives calls)
+1:  cmp     $NAMESZ-1, %ebx     # leave room for a terminating NUL
+    jae     2f                  # 2f = jump forward to the next local label "2:"
+    call    getchar@PLT         # returns int: a char, or EOF (-1)
+    cmp     $EOF, %eax
+    je      2f
+    cmp     $'\n', %eax         # stop at newline (not stored)
+    je      2f
+    lea     name(%rip), %rdx    # lea = load effective address (pointer, not value)
+    movb    %al, (%rdx,%rbx)    # name[len] = c; 'b' = byte size
+    inc     %ebx
+    jmp     1b                  # 1b = jump backward to the previous "1:"
+2:  test    %ebx, %ebx
+    jz      fail                # empty name -> error
+    lea     name(%rip), %rdx
+    movb    $0, (%rdx,%rbx)     # NUL-terminate: C functions need a C string
 
-    # ---- write(STDOUT, name, len) then a newline ----
-    mov     $SYS_write, %eax
-    mov     $STDOUT, %edi
-    mov     %rbx, %rdx          # rsi still points at name
-    syscall
+    # ---- puts(name) : prints the name plus a newline ----
+    lea     name(%rip), %rdi
+    call    puts@PLT
 
-    mov     $SYS_write, %eax
-    mov     $STDOUT, %edi
-    lea     nl(%rip), %rsi
-    mov     $1, %edx
-    syscall
-
-    # ---- openat(AT_FDCWD, name, O_RDONLY) ----
-    mov     $SYS_openat, %eax
-    mov     $AT_FDCWD, %rdi     # 64-bit mov: sign matters, -100 must be full width
-    lea     name(%rip), %rsi
-    mov     $O_RDONLY, %edx
-    syscall
+    # ---- fp = fopen(name, "rb") ----
+    lea     name(%rip), %rdi
+    lea     mode(%rip), %rsi
+    call    fopen@PLT
     test    %rax, %rax
-    js      fail                # sign flag set -> negative -> -errno
-    mov     %rax, %r12          # r12 = fd (callee-saved)
+    jz      fail                # NULL -> could not open
+    mov     %rax, %r12          # r12 = FILE* (callee-saved)
 
-    # ---- loop: n = read(fd, buf, BUFSZ); write(STDOUT, buf, n) ----
+    # ---- loop: while ((c = fgetc(fp)) != EOF) putchar(c); ----
 copy:
-    mov     $SYS_read, %eax
     mov     %r12, %rdi
-    lea     buf(%rip), %rsi
-    mov     $BUFSZ, %edx
-    syscall
-    test    %rax, %rax
-    js      fail                # read error
-    jz      done                # 0 = end of file
-
-    mov     %rax, %rdx          # byte count to write
-    mov     $SYS_write, %eax
-    mov     $STDOUT, %edi
-    lea     buf(%rip), %rsi     # rsi survives syscall; reloaded only for clarity
-    syscall
-    test    %rax, %rax
-    js      fail                # (short writes ignored to keep it simple)
+    call    fgetc@PLT
+    cmp     $EOF, %eax
+    je      done
+    mov     %eax, %edi
+    call    putchar@PLT
     jmp     copy
 
 done:
-    mov     $SYS_close, %eax
+    # EOF means end-of-file *or* error; ferror() tells them apart.
     mov     %r12, %rdi
-    syscall
-    xor     %edi, %edi          # exit code 0 (xor reg,reg = idiomatic zero)
-    jmp     exit
+    call    ferror@PLT
+    mov     %eax, %ebx          # remember error flag across fclose
+    mov     %r12, %rdi
+    call    fclose@PLT
+    xor     %eax, %eax          # exit code 0 (xor reg,reg = idiomatic zero)
+    test    %ebx, %ebx
+    jz      out
 
 fail:
-    mov     $1, %edi            # exit code 1
-exit:
-    mov     $SYS_exit, %eax
-    syscall
-    .size _start, . - _start    # '.' = current address -> symbol size
+    mov     $1, %eax            # exit code 1
+out:
+    # Returning from main (instead of a raw exit syscall) lets the C runtime
+    # run exit(), which flushes stdout's buffer.
+    add     $8, %rsp
+    pop     %r12
+    pop     %rbx
+    ret
+    .size main, . - main        # '.' = current address -> symbol size
 
     # Mark the stack non-executable; modern ld warns without this.
     .section .note.GNU-stack, "", @progbits
