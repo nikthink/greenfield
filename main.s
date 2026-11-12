@@ -6,8 +6,10 @@
     .set EOF, -1
 
     .section .rodata
-cmd_g_str: .asciz "    call getchar@PLT\n    push %eax"
+cmd_h_str: .asciz "    mov $'H', %rdi\n    call putchar@PLT"
 cerr_str: .asciz "error: COMPILATION ERROR"
+genp_start_str: .asciz "    .text\n    .globl main\nmain:\n    push %rbp"
+genp_end_str: .asciz "    mov $0, %eax\n    pop %rbp\n    ret"
 
 
     .text
@@ -15,6 +17,8 @@ cerr_str: .asciz "error: COMPILATION ERROR"
 main:
     push %rbp                # align stack to 16 bytes
 
+    lea genp_start_str(%rip), %rdi
+    call puts@PLT
 ls: call getchar@PLT
     cmp $EOF, %eax
     je done
@@ -22,22 +26,25 @@ ls: call getchar@PLT
     call pcmd
     jmp ls
 done:
+    lea genp_end_str(%rip), %rdi
+    call puts@PLT
     mov  $0, %eax            # return 0
     pop  %rbp                # undo the push so ret finds the return address
     ret
 
 pcmd:
-    cmp $'g', %rdi
-    je cmd_g
+    cmp $'h', %rdi
+    je cmd_h
     cmp $'\n', %rdi
     je pcmd_ret
     lea cerr_str(%rip), %rdi
     call puts@PLT
 pcmd_ret:
     ret
-cmd_g:
-    lea cmd_g_str(%rip), %rdi
+cmd_h:
+    lea cmd_h_str(%rip), %rdi
     call puts@PLT
     ret
+
 
     .section .note.GNU-stack,"",@progbits #instruct linker to mark stack as non-executable
