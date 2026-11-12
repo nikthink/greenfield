@@ -2,12 +2,12 @@
 .SUFFIXES:
 # .SUFFIXES: .s .o
 
-CLIB_BASE_PATH=/usr/lib/
+CRT_BASE_PATH=/usr/lib/
 
 all: checkDependencies build
 
 clean:
-	rm -v main.o main
+	rm -fv main.o main cat_name.o cat_name
 
 checkDependencies:
 	@if [ ! -f /usr/bin/as ] || [ ! -f /usr/bin/ld ]; then \
@@ -18,4 +18,4 @@ build:
 	as -o main.o main.s
 	ld -pie -o main \
 		-dynamic-linker /lib64/ld-linux-x86-64.so.2 \
-		"$(CLIB_BASE_PATH)/Scrt1.o" "$(CLIB_BASE_PATH)/crti.o" main.o -lc "$(CLIB_BASE_PATH)/crtn.o"
+		"$(CRT_BASE_PATH)/Scrt1.o" "$(CRT_BASE_PATH)/crti.o" main.o -lc "$(CRT_BASE_PATH)/crtn.o"
