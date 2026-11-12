@@ -7,8 +7,7 @@ CLIB_BASE_PATH=/usr/lib/
 all: checkDependencies build
 
 clean:
-	rm -rf ./public/
-	rm -fv content/notes/ir/irg.png
+	rm -v main.o main
 
 checkDependencies:
 	@if [ ! -f /usr/bin/as ] || [ ! -f /usr/bin/ld ]; then \
