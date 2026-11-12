@@ -2,7 +2,7 @@
 .SUFFIXES:
 # .SUFFIXES: .s .o
 
-CRT_BASE_PATH=/usr/lib/
+CRT_BASE_PATH=/usr/lib
 
 all: checkDependencies build
 

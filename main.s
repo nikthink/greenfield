@@ -6,10 +6,18 @@
     .set EOF, -1
 
     .section .rodata
-cmd_h_str: .asciz "    mov $'H', %rdi\n    call putchar@PLT"
 cerr_str: .asciz "error: COMPILATION ERROR"
 genp_start_str: .asciz "    .text\n    .globl main\nmain:\n    push %rbp"
 genp_end_str: .asciz "    mov $0, %eax\n    pop %rbp\n    ret"
+cmd_h_str: .asciz "    mov $'H', %rdi\n    call putchar@PLT"
+cmd_z_str: .asciz "    push $0"
+cmd_m_str: .asciz "    push $-1"
+cmd_i_str: .asciz "    pop %rax\n    add $1, %rax\n    push %rax"
+cmd_w_str: .asciz "    pop %rdi\n    call putchar@PLT"
+push_lit_start_str: .asciz "    push $'"
+push_lit_end_str: .asciz "'\n"
+print_lit_start_str: .asciz "    mov $'"
+print_lit_end_str: .asciz "', %rdi\n    call putchar@PLT\n"
 
 
     .text
@@ -33,10 +41,34 @@ done:
     ret
 
 pcmd:
-    cmp $'h', %rdi
+    cmp $'H', %rdi
     je cmd_h
+    cmp $'Z', %rdi
+    je cmd_z
+    cmp $'M', %rdi
+    je cmd_m
+    cmp $'W', %rdi
+    je cmd_w
+    cmp $'I', %rdi
+    je cmd_i
+    cmp $'S', %rdi
+    je cmd_s
     cmp $'\n', %rdi
     je pcmd_ret
+    cmp $' ', %rdi
+    je pcmd_ret
+    cmp $'\t', %rdi
+    je pcmd_ret
+    
+    cmp $' ', %rdi
+    jb 1f
+    cmp $'A', %rdi
+    jb pcmd_lit
+    cmp $'Z', %rdi
+    jbe 1f
+    cmp $'~', %rdi
+    jbe pcmd_lit
+1:
     lea cerr_str(%rip), %rdi
     call puts@PLT
 pcmd_ret:
@@ -45,6 +77,48 @@ cmd_h:
     lea cmd_h_str(%rip), %rdi
     call puts@PLT
     ret
+cmd_z:
+    lea cmd_z_str(%rip), %rdi
+    call puts@PLT
+    ret
+cmd_w:
+    lea cmd_w_str(%rip), %rdi
+    call puts@PLT
+    ret
+cmd_i:
+    lea cmd_i_str(%rip), %rdi
+    call puts@PLT
+    ret
+cmd_m:
+    lea cmd_m_str(%rip), %rdi
+    call puts@PLT
+    ret
+cmd_s:
+    call getchar@PLT
+    cmp $'Q', %eax
+    je pcmd_ret
+    mov %rax, %rbx
+    lea print_lit_start_str(%rip), %rdi
+    call print_no_nl
+    mov %rbx, %rdi
+    call putchar@PLT
+    lea print_lit_end_str(%rip), %rdi
+    call print_no_nl
+    jmp cmd_s
+pcmd_lit:
+    mov %rdi, %rbx
+    lea push_lit_start_str(%rip), %rdi
+    call print_no_nl
+    mov %rbx, %rdi
+    call putchar@PLT
+    lea push_lit_end_str(%rip), %rdi
+    call print_no_nl
+    ret
 
+print_no_nl: # lea   name(%rip), %rdi
+    mov   stdout@GOTPCREL(%rip), %rsi   # address of the stdout variable
+    mov   (%rsi), %rsi                  # 2nd arg: its value, the FILE*
+    call  fputs@PLT
+    ret
 
     .section .note.GNU-stack,"",@progbits #instruct linker to mark stack as non-executable
