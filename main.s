@@ -2,7 +2,7 @@
 # for integer or pointer arguments: 1st: %rdi, 2nd: %rsi, 3rd: %rdx, 4th: %rcx
 # and return value in %rax for integer/pointers
 # look at man to see c func signature, ex `man puts.3`
-# %rbx is one of the registers that are not touched by c lib func
+# some registers that are not touched by c lib func: %rbx, %r12, %r13, %r14, %r15
 
     .set EOF, -1
 
@@ -15,7 +15,10 @@ cmd_d_str: .asciz "    push $0\n    push 8(%rsp)"
 cmd_i_str: .asciz "    pop %rax\n   pop %rbx\n    add $1, %rax\n    push $0\n    push %rax"
 cmd_r_str: .asciz "    call getchar@PLT\n    push $0\n    push %rax"
 cmd_w_str: .asciz "    pop %rdi\n    pop %rbx\n    call putchar@PLT"
-push_lit_start_str: .asciz "    push $'"
+cmd_c_str: .asciz "    pop %rax\n    pop %r12\n    pop %rbx\n    pop %r12\n    sub %rax, %rbx\n    push $0\n    push %rbx"
+cmd_j_str: .asciz "j:"
+cmd_k_str: .asciz "    pop %rax\n    pop %r12\ncmp $0, %rax\n    je j"
+push_lit_start_str: .asciz "    push $0\n    push $'"
 push_lit_end_str: .asciz "'\n"
 print_lit_start_str: .asciz "    mov $'"
 print_lit_end_str: .asciz "', %rdi\n    call putchar@PLT\n"
@@ -54,22 +57,20 @@ pcmd:
     je cmd_i
     cmp $'S', %rdi
     je cmd_s
+    cmp $'P', %rdi
+    je cmd_p
+    cmp $'C', %rdi
+    je cmd_c
+    cmp $'J', %rdi
+    je cmd_j
+    cmp $'K', %rdi
+    je cmd_k
     cmp $'\n', %rdi
     je pcmd_ret
     cmp $' ', %rdi
     je pcmd_ret
     cmp $'\t', %rdi
     je pcmd_ret
-    
-    cmp $' ', %rdi
-    jb 1f
-    cmp $'A', %rdi
-    jb pcmd_lit
-    cmp $'Z', %rdi
-    jbe 1f
-    cmp $'~', %rdi
-    jbe pcmd_lit
-1:
     lea cerr_str(%rip), %rdi
     call puts@PLT
 pcmd_ret:
@@ -94,6 +95,18 @@ cmd_i:
     lea cmd_i_str(%rip), %rdi
     call puts@PLT
     ret
+cmd_c:
+    lea cmd_c_str(%rip), %rdi
+    call puts@PLT
+    ret
+cmd_j:
+    lea cmd_j_str(%rip), %rdi
+    call puts@PLT
+    ret
+cmd_k:
+    lea cmd_k_str(%rip), %rdi
+    call puts@PLT
+    ret
 cmd_s:
     call getchar@PLT
     cmp $'Q', %eax
@@ -106,8 +119,9 @@ cmd_s:
     lea print_lit_end_str(%rip), %rdi
     call print_no_nl
     jmp cmd_s
-pcmd_lit:
-    mov %rdi, %rbx
+cmd_p:
+    call getchar@PLT
+    mov %rax, %rbx
     lea push_lit_start_str(%rip), %rdi
     call print_no_nl
     mov %rbx, %rdi
