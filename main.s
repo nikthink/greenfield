@@ -2,6 +2,7 @@
 # for integer or pointer arguments: 1st: %rdi, 2nd: %rsi, 3rd: %rdx, 4th: %rcx
 # and return value in %rax for integer/pointers
 # look at man to see c func signature, ex `man puts.3`
+# %rbx is one of the registers that are not touched by c lib func
 
     .set EOF, -1
 
@@ -9,11 +10,11 @@
 cerr_str: .asciz "error: COMPILATION ERROR"
 genp_start_str: .asciz "    .text\n    .globl main\nmain:\n    push %rbp"
 genp_end_str: .asciz "    mov $0, %eax\n    pop %rbp\n    ret"
-cmd_h_str: .asciz "    mov $'H', %rdi\n    call putchar@PLT"
-cmd_z_str: .asciz "    push $0"
-cmd_m_str: .asciz "    push $-1"
-cmd_i_str: .asciz "    pop %rax\n    add $1, %rax\n    push %rax"
-cmd_w_str: .asciz "    pop %rdi\n    call putchar@PLT"
+cmd_z_str: .asciz "    push $0\n    push $0"
+cmd_d_str: .asciz "    push $0\n    push 8(%rsp)"
+cmd_i_str: .asciz "    pop %rax\n   pop %rbx\n    add $1, %rax\n    push $0\n    push %rax"
+cmd_r_str: .asciz "    call getchar@PLT\n    push $0\n    push %rax"
+cmd_w_str: .asciz "    pop %rdi\n    pop %rbx\n    call putchar@PLT"
 push_lit_start_str: .asciz "    push $'"
 push_lit_end_str: .asciz "'\n"
 print_lit_start_str: .asciz "    mov $'"
@@ -41,12 +42,12 @@ done:
     ret
 
 pcmd:
-    cmp $'H', %rdi
-    je cmd_h
     cmp $'Z', %rdi
     je cmd_z
-    cmp $'M', %rdi
-    je cmd_m
+    cmp $'D', %rdi
+    je cmd_d
+    cmp $'R', %rdi
+    je cmd_r
     cmp $'W', %rdi
     je cmd_w
     cmp $'I', %rdi
@@ -73,24 +74,24 @@ pcmd:
     call puts@PLT
 pcmd_ret:
     ret
-cmd_h:
-    lea cmd_h_str(%rip), %rdi
-    call puts@PLT
-    ret
 cmd_z:
     lea cmd_z_str(%rip), %rdi
+    call puts@PLT
+    ret
+cmd_d:
+    lea cmd_d_str(%rip), %rdi
     call puts@PLT
     ret
 cmd_w:
     lea cmd_w_str(%rip), %rdi
     call puts@PLT
     ret
-cmd_i:
-    lea cmd_i_str(%rip), %rdi
+cmd_r:
+    lea cmd_r_str(%rip), %rdi
     call puts@PLT
     ret
-cmd_m:
-    lea cmd_m_str(%rip), %rdi
+cmd_i:
+    lea cmd_i_str(%rip), %rdi
     call puts@PLT
     ret
 cmd_s:
