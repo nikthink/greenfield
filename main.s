@@ -40,75 +40,62 @@ ls: call getchar@PLT
 done:
     lea genp_end_str(%rip), %rdi
     call puts@PLT
-    mov  $0, %eax            # return 0
-    pop  %rbp                # undo the push so ret finds the return address
+    mov  $0, %eax
+    pop  %rbp
     ret
 
 pcmd:
     cmp $'Z', %rdi
-    je cmd_z
-    cmp $'D', %rdi
-    je cmd_d
-    cmp $'R', %rdi
-    je cmd_r
-    cmp $'W', %rdi
-    je cmd_w
-    cmp $'I', %rdi
-    je cmd_i
-    cmp $'S', %rdi
-    je cmd_s
-    cmp $'P', %rdi
-    je cmd_p
-    cmp $'C', %rdi
-    je cmd_c
-    cmp $'J', %rdi
-    je cmd_j
-    cmp $'K', %rdi
-    je cmd_k
-    cmp $'\n', %rdi
-    je pcmd_ret
-    cmp $' ', %rdi
-    je pcmd_ret
-    cmp $'\t', %rdi
-    je pcmd_ret
-    lea cerr_str(%rip), %rdi
-    call puts@PLT
-pcmd_ret:
-    ret
-cmd_z:
+    jne 1f
     lea cmd_z_str(%rip), %rdi
     call puts@PLT
     ret
-cmd_d:
+1:
+    cmp $'D', %rdi
+    jne 1f
     lea cmd_d_str(%rip), %rdi
     call puts@PLT
     ret
-cmd_w:
-    lea cmd_w_str(%rip), %rdi
-    call puts@PLT
-    ret
-cmd_r:
+1:
+    cmp $'R', %rdi
+    jne 1f
     lea cmd_r_str(%rip), %rdi
     call puts@PLT
     ret
-cmd_i:
+1:
+    cmp $'W', %rdi
+    jne 1f
+    lea cmd_w_str(%rip), %rdi
+    call puts@PLT
+    ret
+1:
+    cmp $'I', %rdi
+    jne 1f
     lea cmd_i_str(%rip), %rdi
     call puts@PLT
     ret
-cmd_c:
+1:
+    cmp $'C', %rdi
+    jne 1f
     lea cmd_c_str(%rip), %rdi
     call puts@PLT
     ret
-cmd_j:
+1:
+    cmp $'J', %rdi
+    jne 1f
     lea cmd_j_str(%rip), %rdi
     call puts@PLT
     ret
-cmd_k:
+1:
+    cmp $'K', %rdi
+    jne 1f
     lea cmd_k_str(%rip), %rdi
     call puts@PLT
     ret
-cmd_s:
-    call getchar@PLT
+1:
+    cmp $'S', %rdi
+    jne 1f
+2:  call getchar@PLT
     cmp $'Q', %eax
     je pcmd_ret
     mov %rax, %rbx
@@ -118,8 +105,10 @@ cmd_s:
     call putchar@PLT
     lea print_lit_end_str(%rip), %rdi
     call print_no_nl
-    jmp cmd_s
-cmd_p:
+    jmp 2b
+1:
+    cmp $'P', %rdi
+    jne 1f
     call getchar@PLT
     mov %rax, %rbx
     lea push_lit_start_str(%rip), %rdi
@@ -128,6 +117,17 @@ cmd_p:
     call putchar@PLT
     lea push_lit_end_str(%rip), %rdi
     call print_no_nl
+    ret
+1:
+    cmp $'\n', %rdi
+    je pcmd_ret
+    cmp $' ', %rdi
+    je pcmd_ret
+    cmp $'\t', %rdi
+    je pcmd_ret
+    lea cerr_str(%rip), %rdi
+    call puts@PLT
+pcmd_ret:
     ret
 
 print_no_nl: # lea   name(%rip), %rdi
